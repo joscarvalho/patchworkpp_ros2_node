@@ -70,7 +70,8 @@ public:
 
         verbose_ = false;
 
-        sensor_height_ = 1.723;
+        //sensor_height_ = 1.723;
+        sensor_height_ = 0;
         num_iter_ = 3;
         num_lpr_ = 20;
         num_min_pts_ = 10; 
