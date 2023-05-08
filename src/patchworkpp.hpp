@@ -70,19 +70,18 @@ public:
 
         verbose_ = false;
 
-        //sensor_height_ = 1.723;
-        sensor_height_ = 0;
+        sensor_height_ = 1.723;
         num_iter_ = 3;
         num_lpr_ = 20;
         num_min_pts_ = 10; 
-        th_seeds_ = 0.4;
-        th_dist_ = 0.3;
-        th_seeds_v_ = 0.4;
-        th_dist_v_ = 0.3;
+        th_seeds_ = 0.3; //0.4
+        th_dist_ = 0.125; //0.3
+        th_seeds_v_ = 0.25; //0.4
+        th_dist_v_ = 0.1;
         max_range_ = 80.0;
         min_range_ = 2.7;
-        uprightness_thr_ = 0.5;
-        adaptive_seed_selection_margin_ = -1.1;
+        uprightness_thr_ = 0.707; //0.5
+        adaptive_seed_selection_margin_ = -1.2; //-1.1
         RNR_ver_angle_thr_ = -15.0;
         RNR_intensity_thr_ = 0.2;
         max_flatness_storage_ = 1000;

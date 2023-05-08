@@ -115,6 +115,8 @@ void handler (AlfaNode * node)
     //calculate_precision_recall(*input_cloud, pc_ground, precision, recall);
     calculate_precision_recall_without_vegetation(*input_cloud, pc_ground, precision_wo_veg, recall_wo_veg);
 
+    //std::cout << std::fixed << "Frame " << frames << " takes : " << time_taken << endl;
+
     /*
     std::cout << std::fixed << "\n\nth, " << " takes : " << time_taken << " | " 
             << input_cloud->size() << " -> " << pc_ground.size() << "\033[0m" << endl;
@@ -150,7 +152,7 @@ void handler (AlfaNode * node)
         node->push_point_output_cloud(p);
     }
 
-    std::cout << input_cloud->size() << " = " << pc_ground.size() << " + " << pc_non_ground.size() << std::endl;
+    //std::cout << input_cloud->size() << " = " << pc_ground.size() << " + " << pc_non_ground.size() << std::endl;
     //metrics(precision, recall, input_cloud->size(), pc_ground.size());
     metrics(precision_wo_veg, recall_wo_veg, input_cloud->size(), pc_ground.size());
 }
@@ -228,10 +230,10 @@ int main(int argc, char **argv)
     std::cout << "Post Processing Function: post_processing" << std::endl << std::endl;
 
     rclcpp::on_shutdown(&callback_shutdown);
-    //rclcpp::spin(std::make_shared<AlfaNode>("/velodyne_points","patchworkpp", parameters, 0, AlfaHardwareSupport{false, false}, 1, 1, &handler, &post_processing));
+    rclcpp::spin(std::make_shared<AlfaNode>("/velodyne_points","patchworkpp", parameters, 0, AlfaHardwareSupport{false, false}, 1, 1, &handler, &post_processing));
     //rclcpp::spin(std::make_shared<AlfaNode>("/cloud_ply","patchworkpp", parameters, 0, AlfaHardwareSupport{false, false}, 1, 1, &handler, &post_processing));
     //rclcpp::spin(std::make_shared<AlfaNode>("/cloud_pcd","patchworkpp", parameters, 0, AlfaHardwareSupport{false, false}, 1, 1, &handler, &post_processing));
-    rclcpp::spin(std::make_shared<AlfaNode>("/kitti/point_cloud","patchworkpp", parameters, 0, AlfaHardwareSupport{false, false}, 1, 1, &handler, &post_processing));
+    //rclcpp::spin(std::make_shared<AlfaNode>("/kitti/point_cloud","patchworkpp", parameters, 0, AlfaHardwareSupport{false, false}, 1, 1, &handler, &post_processing));
     //rclcpp::spin(std::make_shared<AlfaNode>("/kitti/velo/pointcloud","patchworkpp", parameters, 0, AlfaHardwareSupport{false, false}, 1, 1, &handler, &post_processing));
     rclcpp::shutdown();
     return 0;
