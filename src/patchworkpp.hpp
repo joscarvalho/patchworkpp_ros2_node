@@ -23,8 +23,7 @@
 #include <unordered_map>
 #include <string>
 #include <variant>
-
-#include "utils.hpp"
+#include <pcl/common/centroid.h>
 
 #define MARKER_Z_VALUE -2.2
 #define UPRIGHT_ENOUGH 0.55
@@ -140,8 +139,15 @@ public:
         }
     }
 
-    void estimate_ground(pcl::PointCloud<PointTP> cloud_in,
-                         pcl::PointCloud<PointTP> &cloud_ground, pcl::PointCloud<PointTP> &cloud_nonground, double &time_taken);
+    void estimate_ground(   pcl::PointCloud<PointTP> cloud_in,
+                            pcl::PointCloud<PointTP> &cloud_ground, pcl::PointCloud<PointTP> &cloud_nonground,
+                            double& time_taken_RNR,
+                            double& time_taken_CZM,
+                            double& time_taken_SORT,
+                            double& time_taken_GROUND_ESTIMATE,
+                            double& time_taken_AGLE,
+                            double& time_taken_TGR,
+                            double& time_taken_UPDATE);
 
     void update_parameters(const string parameter_name, const double parameter_value) {
             auto iter = variableMap.find(parameter_name);
@@ -169,52 +175,6 @@ public:
                     std::cout << *(std::get<bool*>(value)) << std::endl;
                 }
             }
-    }
-
-    void metrics(pcl::PointCloud<PointTP> cloud_in,
-                pcl::PointCloud<PointTP> &cloud_ground, pcl::PointCloud<PointTP> &cloud_nonground, 
-                double &TP, double &FP, double &TN, double &FN) {
-
-        int ground_points = count_num_ground(cloud_in); // Nº pontos de chão na cloud original
-        int eTP = count_num_ground(cloud_ground); // Nº pontos de chão na cloud de chão - True Positives
-
-        int e_ground_outliers = count_num_outliers(cloud_ground); // Nº outliers na cloud de chão
-        int eFP = cloud_ground.size() - eTP - e_ground_outliers; // False Positives
-
-        int eFN = count_num_ground(cloud_nonground);
-        int e_non_ground_outliers = count_num_outliers(cloud_nonground);
-        int eTN = cloud_nonground.size() - eFN - e_non_ground_outliers;
-
-        TP = eTP;
-        FP = eFP;
-        TN = eTN;
-        FN = eFN;
-    }
-
-    void metrics_wo_vegetation(pcl::PointCloud<PointTP> cloud_in,
-                pcl::PointCloud<PointTP> &cloud_ground, pcl::PointCloud<PointTP> &cloud_nonground, 
-                double &TP, double &FP, double &TN, double &FN) {
-
-        int num_veg = 0;
-        for (auto const& pt: cloud_ground.points)
-        {
-            if (pt.label == VEGETATION) num_veg++;
-        }
-
-        int ground_points = count_num_ground_without_vegetation(cloud_in); // Nº pontos de chão na cloud original
-        int eTP = count_num_ground_without_vegetation(cloud_ground); // Nº pontos de chão na cloud de chão - True Positives
-
-        int e_ground_outliers = count_num_outliers(cloud_ground); // Nº outliers na cloud de chão
-        int eFP = cloud_ground.size() - eTP - e_ground_outliers - num_veg; // False Positives
-
-        int eFN = count_num_ground_without_vegetation(cloud_nonground);
-        int e_non_ground_outliers = count_num_outliers(cloud_nonground);
-        int eTN = cloud_nonground.size() - eFN - e_non_ground_outliers - num_veg;
-
-        TP = eTP;
-        FP = eFP;
-        TN = eTN;
-        FN = eFN;
     }
 
 private:
@@ -490,17 +450,26 @@ void PatchWorkpp<PointTP>::estimate_ground(
         pcl::PointCloud<PointTP> cloud_in,
         pcl::PointCloud<PointTP> &cloud_ground,
         pcl::PointCloud<PointTP> &cloud_nonground,
-        double &time_taken) {
+        double& time_taken_RNR,
+        double& time_taken_CZM,
+        double& time_taken_SORT,
+        double& time_taken_GROUND_ESTIMATE,
+        double& time_taken_AGLE,
+        double& time_taken_TGR,
+        double& time_taken_UPDATE) {
     
     unique_lock<recursive_mutex> lock(mutex_);
 
-    //poly_list_.header.stamp = std::chrono::system_clock::now();
-    //if (!poly_list_.polygons.empty()) poly_list_.polygons.clear();
-    //if (!poly_list_.likelihood.empty()) poly_list_.likelihood.clear();
+    time_taken_RNR = 0;
+    time_taken_CZM = 0;
+    time_taken_SORT = 0;
+    time_taken_GROUND_ESTIMATE = 0;
+    time_taken_AGLE = 0;
+    time_taken_TGR = 0;
+    time_taken_UPDATE = 0;
 
     static double start, t0, t1, t2, end;
 
-    double pca_time_ = 0.0;
     double t_revert = 0.0;
     double t_total_ground = 0.0;
     double t_total_estimate = 0.0;
@@ -557,7 +526,8 @@ void PatchWorkpp<PointTP>::estimate_ground(
                 
                 double t_tmp1 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
                 t_total_ground += t_tmp1 - t_tmp0;
-                pca_time_ += t_tmp1 - t_tmp0;
+
+                double t_tmp2 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
                 // Status of each patch
                 // used in checking uprightness, elevation, and flatness, respectively
@@ -568,8 +538,6 @@ void PatchWorkpp<PointTP>::estimate_ground(
                 
                 double heading = 0.0;
                 for(int i=0; i<3; i++) heading += pc_mean_(i,0)*normal_(i);
-
-                double t_tmp2 = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 
                 /*  
                     About 'is_heading_outside' condition, heading should be smaller than 0 theoretically.
@@ -663,7 +631,14 @@ void PatchWorkpp<PointTP>::estimate_ground(
     update_flatness_thr();
     
     end = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    time_taken = end - start;
+
+    time_taken_RNR = t1-start;
+    time_taken_CZM = t2-t1;
+    time_taken_SORT = t_sort;
+    time_taken_GROUND_ESTIMATE = t_total_ground;
+    time_taken_AGLE = t_total_estimate;
+    time_taken_TGR = t_revert;
+    time_taken_UPDATE = end - t_update;
 
     /*
     ofstream pp_time_taken ("pp_time_taken.txt", std::ios_base::app);
