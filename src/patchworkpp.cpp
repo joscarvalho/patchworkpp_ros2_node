@@ -15,64 +15,23 @@
 #include <iostream>
 #include <fstream>
 
-using PointTypePatchwork = PointXYZIL;
+#define NODE_NAME "ext_patchworkpp"
+#define DEFAULT_TOPIC "/velodyne_points"
+
+#define NODE_ID 0
+#define POINTCLOUD_ID 0
+
+using PointType = AlfaPoint;
 using namespace std;
 
-#define GROUNDSEG_ID 0
-
-#define PARAMETER_MULTIPLIER 1000
-
-AlfaExtensionParameter parameters [30];
-
-boost::shared_ptr<PatchWorkpp<PointTypePatchwork> > PatchworkppGroundSeg;
-boost::shared_ptr<Metrics<PointTypePatchwork>> PatchworkppMetrics;
+boost::shared_ptr<PatchWorkpp<PointType>> PatchworkppGroundSeg;
+boost::shared_ptr<Metrics<PointType>> PatchworkppMetrics;
+AlfaExtensionParameter parameters[30];
 
 void callback_shutdown()
 {
     PatchworkppMetrics->callback_shutdown();
 }
-
-// void pc2rgb (AlfaNode * node, pcl::PointCloud<PointTypePatchwork> pc_ground, pcl::PointCloud<PointTypePatchwork> pc_non_ground)
-// {   
-//     std::uint8_t r, g, b;
-//     if(node->get_extension_parameter("show_ground_rgb") != 0)
-//     {
-//         r = 255;
-//         g = 0;
-//         b = 0;
-//         uint32_t rgb = ((std::uint32_t)r << 16 | (std::uint32_t)g << 8 | (std::uint32_t)b);
-//         for (const auto& point : pc_ground.points) // PUBLISH
-//         {
-//             pcl::PointXYZRGB p;
-
-//             p.x = point.x;
-//             p.y = point.y;
-//             p.z = point.z;
-//             p.rgb = *reinterpret_cast<float*>(&rgb);
-
-//             node->push_point_output_cloud(p);
-//         }
-//     }
-    
-//     if(node->get_extension_parameter("show_non_ground_rgb") != 0)
-//     {
-//         r = 0;
-//         b = 0;
-//         g = 255;
-//         uint32_t rgb = ((std::uint32_t)r << 16 | (std::uint32_t)g << 8 | (std::uint32_t)b);
-//         for (const auto& point : pc_non_ground.points) // PUBLISH
-//         {
-//             pcl::PointXYZRGB p;
-
-//             p.x = point.x;
-//             p.y = point.y;
-//             p.z = point.z;
-//             p.rgb = *reinterpret_cast<float*>(&rgb);
-
-//             node->push_point_output_cloud(p);
-//         }
-//     }
-// }
 
 void publish_cloud(AlfaNode *node, pcl::PointCloud<PointType> pc_ground, pcl::PointCloud<PointType> pc_non_ground)
 {
@@ -80,7 +39,7 @@ void publish_cloud(AlfaNode *node, pcl::PointCloud<PointType> pc_ground, pcl::Po
     {
         for (const auto &point : pc_ground.points) // PUBLISH
         {
-            node->push_point_output_cloud(point);
+            node->push_point_output_pointcloud(point);
         }
     }
 
@@ -88,33 +47,29 @@ void publish_cloud(AlfaNode *node, pcl::PointCloud<PointType> pc_ground, pcl::Po
     {
         for (const auto &point : pc_non_ground.points) // PUBLISH
         {
-            node->push_point_output_cloud(point);
+            node->push_point_output_pointcloud(point);
         }
     }
 }
 
-void update_var (AlfaNode * node, boost::shared_ptr<PatchWorkpp<PointTypePatchwork> > PatchworkppGroundSeg)
+void update_var (AlfaNode * node, boost::shared_ptr<PatchWorkpp<PointType> > PatchworkppGroundSeg)
 {   
-    size_t num_parameters = sizeof(parameters) / sizeof(parameters[0]);
+    int num_parameters = sizeof(parameters) / sizeof(parameters[0]);
 
     for ( int i = 0; i < num_parameters; i++)
     {
         if ( parameters[i].parameter_name != "" )
         {
             PatchworkppGroundSeg->update_parameters(parameters[i].parameter_name,
-        node->get_extension_parameter(parameters[i].parameter_name));
+            node->get_extension_parameter(parameters[i].parameter_name));
         }
     }
 }
 
 void handler (AlfaNode * node)
-{
-    pcl::PointCloud<PointTypePatchwork>::Ptr input_cloud;
-    input_cloud.reset(new pcl::PointCloud<PointTypePatchwork>);
-    pcl::fromROSMsg(*(node->ros_pointcloud),*input_cloud);
-
-    pcl::PointCloud<PointTypePatchwork> pc_ground;
-    pcl::PointCloud<PointTypePatchwork> pc_non_ground;
+{    
+    pcl::PointCloud<PointType> pc_ground;
+    pcl::PointCloud<PointType> pc_non_ground;
     double time_taken_RNR;
     double time_taken_CZM;
     double time_taken_SORT;
@@ -125,7 +80,7 @@ void handler (AlfaNode * node)
 
     update_var(node, PatchworkppGroundSeg);
     PatchworkppGroundSeg->initialize();
-    PatchworkppGroundSeg->estimate_ground(  *input_cloud, pc_ground, pc_non_ground,
+    PatchworkppGroundSeg->estimate_ground(  *node->get_input_pointcloud(), pc_ground, pc_non_ground,
                                             time_taken_RNR,
                                             time_taken_CZM,
                                             time_taken_SORT,
@@ -134,7 +89,9 @@ void handler (AlfaNode * node)
                                             time_taken_TGR,
                                             time_taken_UPDATE);
 
-    PatchworkppMetrics->calculate_metrics(  *node->input_cloud, pc_ground, pc_non_ground,
+    publish_cloud(node, pc_ground, pc_non_ground);
+
+    PatchworkppMetrics->calculate_metrics(  *node->get_input_pointcloud(), pc_ground, pc_non_ground,
                                             time_taken_RNR,
                                             time_taken_CZM,
                                             time_taken_SORT,
@@ -142,38 +99,43 @@ void handler (AlfaNode * node)
                                             time_taken_AGLE,
                                             time_taken_TGR * 1000,
                                             time_taken_UPDATE * 1000);
-
-    //pc2rgb(node, pc_ground, pc_non_ground);
-    publish_cloud(node, pc_ground, pc_non_ground);
 }
 
 void post_processing (AlfaNode * node)
 {
-    node->publish_output_cloud();
-
-    alfa_msg::msg::AlfaMetrics output_metrics;
-
-    PatchworkppMetrics->post_processing(output_metrics, node->get_handler_time(), node->get_full_processing_time());
-
-    node->publish_metrics(output_metrics);
+    PatchworkppMetrics->post_processing(node->get_handler_time(), node->get_full_processing_time());
+    node->publish_pointcloud();
 }
 
 int main(int argc, char **argv)
 {
+    // Initialize ROS 2
     rclcpp::init(argc, argv);
 
-    PatchworkppMetrics.reset(new Metrics<PointTypePatchwork>(7,
-                                                            "Time taken for RNR",
-                                                            "Time taken to CZM",
-                                                            "Time taken to Sort",
-                                                            "Time taken to estimate ground",
-                                                            "Time taken to A-GLE",
-                                                            "Time taken to TGR",
-                                                            "Time taken to Update"));
+    // Get subscriber topic from command line arguments
+    std::string subscriber_topic = DEFAULT_TOPIC;
+    if (argc > 1) {
+        subscriber_topic = argv[1];
+    }
 
-    PatchworkppGroundSeg.reset(new PatchWorkpp<PointTypePatchwork>());
+    #ifdef EXT_HARDWARE
+        AlfaHardwareSupport hardware_support{false, true};
+    #else
+        AlfaHardwareSupport hardware_support{false, false};
+    #endif
+	
+    AlfaConfiguration conf;
 
-    //////////////////////////////////////////////////////
+    conf.subscriber_topic = subscriber_topic;
+    conf.node_name = NODE_NAME;
+    conf.pointcloud_id = POINTCLOUD_ID;
+    conf.extension_id = NODE_ID;
+    conf.hardware_support = hardware_support;
+    conf.latency = 0;
+    conf.number_of_debug_points = 1;
+    conf.metrics_publishing_type = ALL_METRICS;
+    conf.custom_field_conversion_type = CUSTOM_FIELD_LABEL;
+
 
     parameters[0].parameter_name = "verbose_";
     parameters[0].parameter_value = 0.0;
@@ -256,21 +218,28 @@ int main(int argc, char **argv)
     parameters[26].parameter_name = "show_non_ground_rgb";
     parameters[26].parameter_value = 1.0;
 
-    //Launch Ground Segmentation with:
-    std::cout << "Starting Ground Segmentation node with the following characteristics" << std::endl;
-    std::cout << "Subscriber topic: /velodyne_points" << std::endl;
-    std::cout << "Name of the node: patchworkpp" << std::endl;
-    std::cout << "Parameters: parameter list" << std::endl;
-    std::cout << "ID: 0" << std::endl;
-    std::cout << "Hardware Driver (SIU): false" << std::endl;
-    std::cout << "Hardware Extension: false" << std::endl;
-    std::cout << "Distance Resolution: 1 cm" << std::endl;
-    std::cout << "Intensity Multiplier: 1x" << std::endl;
-    std::cout << "Handler Function: handler" << std::endl;
-    std::cout << "Post Processing Function: post_processing" << std::endl << std::endl;
+
+    PatchworkppMetrics.reset(new Metrics<PointType>(7,
+                                                            "Time taken for RNR",
+                                                            "Time taken to CZM",
+                                                            "Time taken to Sort",
+                                                            "Time taken to estimate ground",
+                                                            "Time taken to A-GLE",
+                                                            "Time taken to TGR",
+                                                            "Time taken to Update"));
+
+    PatchworkppGroundSeg.reset(new PatchWorkpp<PointType>());
+
+
 
     rclcpp::on_shutdown(&callback_shutdown);
-    rclcpp::spin(std::make_shared<AlfaNode>("/velodyne_points","patchworkpp", parameters, 0, AlfaHardwareSupport{false, false}, 1, 1, &handler, &post_processing));
+
+    // Create an instance of AlfaNode and spin it
+    rclcpp::spin(std::make_shared<AlfaNode>(conf, 
+                                    parameters,
+                                    &handler, 
+                                    &post_processing));
+
     rclcpp::shutdown();
     return 0;
 }
