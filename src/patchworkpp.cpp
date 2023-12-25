@@ -10,7 +10,6 @@
 #include <pcl/point_types_conversion.h>
 
 #include "patchworkpp.hpp"
-#include "metrics.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -25,13 +24,7 @@ using PointType = AlfaPoint;
 using namespace std;
 
 boost::shared_ptr<PatchWorkpp<PointType>> PatchworkppGroundSeg;
-boost::shared_ptr<Metrics<PointType>> PatchworkppMetrics;
 AlfaExtensionParameter parameters[30];
-
-void callback_shutdown()
-{
-    PatchworkppMetrics->callback_shutdown();
-}
 
 void publish_cloud(AlfaNode *node, pcl::PointCloud<PointType> pc_ground, pcl::PointCloud<PointType> pc_non_ground)
 {
@@ -90,20 +83,10 @@ void handler (AlfaNode * node)
                                             time_taken_UPDATE);
 
     publish_cloud(node, pc_ground, pc_non_ground);
-
-    PatchworkppMetrics->calculate_metrics(  *node->get_input_pointcloud(), pc_ground, pc_non_ground,
-                                            time_taken_RNR,
-                                            time_taken_CZM,
-                                            time_taken_SORT,
-                                            time_taken_GROUND_ESTIMATE,
-                                            time_taken_AGLE,
-                                            time_taken_TGR * 1000,
-                                            time_taken_UPDATE * 1000);
 }
 
 void post_processing (AlfaNode * node)
 {
-    PatchworkppMetrics->post_processing(node->get_handler_time(), node->get_full_processing_time());
     node->publish_pointcloud();
 }
 
@@ -218,21 +201,7 @@ int main(int argc, char **argv)
     parameters[26].parameter_name = "show_non_ground_rgb";
     parameters[26].parameter_value = 1.0;
 
-
-    PatchworkppMetrics.reset(new Metrics<PointType>(7,
-                                                            "Time taken for RNR",
-                                                            "Time taken to CZM",
-                                                            "Time taken to Sort",
-                                                            "Time taken to estimate ground",
-                                                            "Time taken to A-GLE",
-                                                            "Time taken to TGR",
-                                                            "Time taken to Update"));
-
     PatchworkppGroundSeg.reset(new PatchWorkpp<PointType>());
-
-
-
-    rclcpp::on_shutdown(&callback_shutdown);
 
     // Create an instance of AlfaNode and spin it
     rclcpp::spin(std::make_shared<AlfaNode>(conf, 
